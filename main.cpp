@@ -3,6 +3,7 @@
 #include "MQTTmbed.h"
 #include "MQTTClient.h"
 #include "stm32l475e_iot01_accelero.h"
+int16_t gDataXYZ[3] = {0};
 int publishflag = 0;
 MQTT::Client<MQTTNetwork, Countdown> *myclient;
 DigitalOut led1(LED1);
@@ -176,14 +177,40 @@ void _detecting_gesture() {
     //     threshold_angle += 10;
     //     if(threshold_angle > 60) threshold_angle = 30;
     // }
+    // for(int i = 0; i< input_length; i++){
+    //     printf("%.2f    ", save_data[i]);
+    //     if(i %3 == 0)printf("\n");
+    // }
+    // printf("//////////////////////a set");
+    // while(mode != anglemode) {
+    //     ThisThread::sleep_for(300ms);
+    // }
+    if(gesture_index < 3 ) {
     mygesture = gesture_index;
-    if(mygesture < 3 ) {
         // char buff[100];
         // sprintf(buff,"gesture # %d is detect", mygesture);
         // publish_text(myclient, "Mbed",  buff);
+          int num = 0;
+        long int dotprodct=0;
+        long int normg=0;
+        long int normv=0;
+        for(int j = 0; j< input_length -30 ;j+=6) {
+            for(int i = 0; i < 3; i++){
+                dotprodct += gDataXYZ[i] * model_input->data.f[i+j];
+                normg += gDataXYZ[i] * gDataXYZ[i];
+                normv += model_input->data.f[i+j] * model_input->data.f[i+j];
+            }
+            float cosvalue = dotprodct / sqrt(normg) / sqrt (normv);
+            int angle = acos(cosvalue) * 180 / 3.1415926;
+            if(angle > 30) num++;
+        }
+        myfeature = num;
+        // printf("\n my feature = %d\n", myfeature);
         publishflag= 1;
     }
-    
+    // while(publishflag == 1) {
+    //     ThisThread::sleep_for(200ms);
+    // }
     // Clear the buffer next time we read data
     should_clear_buffer = gesture_index < label_num;
 
@@ -194,13 +221,31 @@ void _detecting_gesture() {
   }
 }
 
+int get_feature() {
+    int num;
+        // long int dotprodct=0;
+        // long int normg=0;
+        // long int normv=0;
+        // for(int j = 0; j< input_length ;j+=9) {
+        //     for(int i = 0; i < 3; i++){
+        //         dotprodct += gDataXYZ[i] * model_input->data.f[i+j];
+        //         normg += gDataXYZ[i] * gDataXYZ[i];
+        //         normv += model_input->data.f[i+j] * model_input->data.f[i+j];
+        //     }
+        //     float cosvalue = dotprodct / sqrt(normg) / sqrt (normv);
+        //     angle = acos(cosvalue) * 180 / 3.1415926;
+        //     if(angle > 30) num++;
+        // }
+    return num;
+}
+
 //############## Tensorflow ###########
 //############## ACC ##################
 #include "stm32l475e_iot01_accelero.h"
 float angle = 0;
 Thread acc;
 int16_t vDataXYZ[3] = {0};
-int16_t gDataXYZ[3] = {0};
+
 void init_gdata() {
     printf(" initializing the gravity vector....");
     BSP_ACCELERO_Init();
@@ -269,7 +314,8 @@ int _monitor()
             uLCD.printf("-");
           }
          uLCD.locate(0,6);
-                uLCD.printf(" %.3f", angle);
+         if(mygesture != 3) uLCD.printf("  %d\n", mygesture);
+                // uLCD.printf(" %.3f", angle);
         //   else{
         //     while(mode == anglemode){
         //         uLCD.locate(0,6);
@@ -327,7 +373,7 @@ void publish_threshold_angle(MQTT::Client<MQTTNetwork, Countdown>* client) {
     message_num++;
     MQTT::Message message;
     char buff[100];
-    sprintf(buff, "Threshold angle is %d", mygesture);
+    sprintf(buff, "(%d , %d) ", mygesture, myfeature);
     message.qos = MQTT::QOS0;
     message.retained = false;
     message.dup = false;
@@ -512,16 +558,16 @@ void gesture_UI(Arguments *in, Reply *out){
     mode = UImode;
     led3 = mode; // orange for angle, blue for gestureUI
     arrivedcount = 0;
-    out->putData("gesture UI mode");
+    out->putData("accelerator_capture_mode");
     threshold_angle_published = false;
 }
-RPCFunction rpc_gesture_UI(&gesture_UI, "UI");
+RPCFunction rpc_gesture_UI(&gesture_UI, "acccap");
 void tilt_angle_detection(Arguments *in, Reply *out){
     mode = anglemode;
     led3 = mode; // orange for angle, blue for gestureUI
     arrivedcount = 0;
-    out->putData("tilt angle detection mode");
-    init_gdata();
+    out->putData("accelerator_capture_mode");
+    // init_gdata();
 }
 RPCFunction  rpc_tilt_angle_detection(&tilt_angle_detection, "detect");
 void _rpcio(){
