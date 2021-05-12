@@ -16,7 +16,7 @@ to enter acc capture mode
 ![](https://i.imgur.com/HJFXXYv.png)
 
 in serial you will see like this when doing some gesture
-**note: 0 is mygesture**
+**note: 0 is mygesture 1, 2 is TA's gesture**
 first value is gesture  
 and the second value is feature
 ![](https://i.imgur.com/gYogzcV.png)
