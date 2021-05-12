@@ -1,4 +1,10 @@
 #include "mbed.h"
+#include "MQTTNetwork.h"
+#include "MQTTmbed.h"
+#include "MQTTClient.h"
+#include "stm32l475e_iot01_accelero.h"
+int publishflag = 0;
+MQTT::Client<MQTTNetwork, Countdown> *myclient;
 DigitalOut led1(LED1);
 DigitalOut led3(LED3);
 int threshold_angle = 30;
@@ -6,6 +12,10 @@ int mode = -1;
 #define UImode 0
 #define anglemode 1
 #define rpcmode -1
+int myfeature = 0;
+int get_feature();
+int mygesture = -1;
+int  publish_text(MQTT::Client<MQTTNetwork, Countdown>* client, char *mytopic, char *text);
 //############## Tensorflow ###########
 Thread gesture_detect;
 #include "accelerometer_handler.h"
@@ -157,15 +167,21 @@ void _detecting_gesture() {
       error_reporter->Report("Invoke failed on index: %d\n", begin_index);
       continue;
     }
-
     // Analyze the results to obtain a prediction
     gesture_index = PredictGesture(interpreter->output(0)->data.f);
-    while(mode == anglemode || mode == rpcmode){
-        ThisThread::sleep_for(1000ms);
-    }
-    if(gesture_index == 0) {
-        threshold_angle += 10;
-        if(threshold_angle > 60) threshold_angle = 30;
+    // while(mode == anglemode || mode == rpcmode){
+    //     ThisThread::sleep_for(1000ms);
+    // }
+    // if(gesture_index == 0) {
+    //     threshold_angle += 10;
+    //     if(threshold_angle > 60) threshold_angle = 30;
+    // }
+    mygesture = gesture_index;
+    if(mygesture < 3 ) {
+        // char buff[100];
+        // sprintf(buff,"gesture # %d is detect", mygesture);
+        // publish_text(myclient, "Mbed",  buff);
+        publishflag= 1;
     }
     
     // Clear the buffer next time we read data
@@ -232,10 +248,11 @@ int _monitor()
     // uLCD.printf("hw3\nThershold degree\n");
     uLCD.text_width(2); //4X size text
     uLCD.text_height(2);
-      uLCD.printf("  30\n");
-      uLCD.printf("  40\n");
-      uLCD.printf("  50\n");
-      uLCD.printf("  60\n");
+    if(mygesture != 3) uLCD.printf("  %d\n", mygesture);
+    //   uLCD.printf("  30\n");
+    //   uLCD.printf("  40\n");
+    //   uLCD.printf("  50\n");
+    //   uLCD.printf("  60\n");
 //       uLCD.text_width(1); //4X size text
 //     uLCD.text_height(1);
 //     uLCD.printf("Current angle\n");
@@ -264,10 +281,7 @@ int _monitor()
 }
 //############## uLCD##################
 //############## mqtt #################
-#include "MQTTNetwork.h"
-#include "MQTTmbed.h"
-#include "MQTTClient.h"
-#include "stm32l475e_iot01_accelero.h"
+
 Thread wholemqtt_thread;
 bool threshold_angle_published = false;
 // GLOBAL VARIABLES
@@ -313,7 +327,7 @@ void publish_threshold_angle(MQTT::Client<MQTTNetwork, Countdown>* client) {
     message_num++;
     MQTT::Message message;
     char buff[100];
-    sprintf(buff, "Threshold angle is %d", threshold_angle);
+    sprintf(buff, "Threshold angle is %d", mygesture);
     message.qos = MQTT::QOS0;
     message.retained = false;
     message.dup = false;
@@ -330,13 +344,14 @@ void publish_current_angle(MQTT::Client<MQTTNetwork, Countdown>* client) {
     // printf("sdfh\n");
     MQTT::Message message;
     char buff[100];
-    sprintf(buff, "angle is %f now", angle);
+    sprintf(buff, "angle is %f now", mygesture);
     message.qos = MQTT::QOS0;
     message.retained = false;
     message.dup = false;
     message.payload = (void*) buff;
     message.payloadlen = strlen(buff) + 1;
     int rc = client->publish(topic, message);
+    publishflag = 0;
     printf("rc:  %d\r\n", rc);
     printf("Puslish message: %s\r\n", buff);
 }
@@ -431,10 +446,16 @@ int _mqtt() {
         // client.publish(topic, message);
         // client.yield(500);
         // publish_threshold_angle(&client);
-        if(mode == anglemode && angle >= threshold_angle) {
-                publish_current_angle(&client);
+        if(publishflag == 1) {
+                // publish_current_angle(&client);
+                publish_threshold_angle(&client);
+                publishflag =0;
              client.yield(500);
         }
+        //  if(mode == anglemode && angle >= threshold_angle) {
+        //         publish_current_angle(&client);
+        //      client.yield(500);
+        // }
     }
 
     printf("Ready to close MQTT Network......\n");
@@ -536,4 +557,21 @@ int main () {
     // lookingangle.start(_lookingangle);
     while(1){}
     
+}
+int  publish_text(MQTT::Client<MQTTNetwork, Countdown>* client, char *mytopic, char *text) {
+    message_num++;
+    // printf("sdfh\n");
+    MQTT::Message message;
+    char buff[100];
+    // sprintf(buff, "angle is %f now", angle);
+    strcpy(buff,text);
+    message.qos = MQTT::QOS0;
+    message.retained = false;
+    message.dup = false;
+    message.payload = (void*) buff;
+    message.payloadlen = strlen(buff) + 1;
+    int rc = client->publish(mytopic, message);
+    printf("rc:  %d\r\n", rc);
+    printf("Puslish message: %s\r\n", buff);
+    return rc;
 }
